@@ -27,7 +27,22 @@
     const rect = element.getBoundingClientRect();
     return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
   };
-  const readRules = () => new Promise((resolve) => chrome.storage.local.get({ [STORAGE_KEY]: [] }, (result) => resolve(new Set((Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : []).filter((rule) => /^[a-f0-9]{64}$/i.test(rule))))));
+  const globRegExp = (pattern) => {
+    let source = "^";
+    for (const character of normalize(pattern)) {
+      if (character === "*") source += "[\s\S]*";
+      else if (character === "?") source += "[\s\S]";
+      else source += character.replace(/[\\^$+?.()|{}\[\]]/g, "\\$&");
+    }
+    return new RegExp(`${source}$`);
+  };
+  const readRules = () => new Promise((resolve) => chrome.storage.local.get({ [STORAGE_KEY]: [] }, (result) => {
+    const raw = Array.isArray(result[STORAGE_KEY]) ? result[STORAGE_KEY] : [];
+    resolve({
+      hashes: new Set(raw.filter((rule) => typeof rule === "string" && /^[a-f0-9]{64}$/i.test(rule))),
+      globs: raw.filter((rule) => rule && typeof rule === "object" && rule.type === "glob" && typeof rule.pattern === "string").map((rule) => globRegExp(rule.pattern)),
+    });
+  }));
   const approvalCardFor = (button) => {
     let node = button;
     for (let level = 0; level < 8 && node; level += 1, node = node.parentElement) {
@@ -141,7 +156,7 @@
   };
   const autoApproveAllowlisted = async () => {
     const rules = await readRules();
-    if (rules.size === 0) return;
+    if (rules.hashes.size === 0 && rules.globs.length === 0) return;
     const buttons = [...document.querySelectorAll("button")].filter(visible).filter((button) => !scanned.has(button) && !button.dataset.t3ApprovalAllowlistScanned).filter((button) => /^(批准|approve)$/i.test((button.innerText || button.getAttribute("aria-label") || "").trim()));
     for (const button of buttons) {
       const card = approvalCardFor(button);
@@ -151,7 +166,7 @@
       const fingerprint = await digest(command);
       scanned.add(button);
       button.dataset.t3ApprovalAllowlistScanned = "1";
-      if (rules.has(fingerprint)) button.click();
+      if (rules.hashes.has(fingerprint) || rules.globs.some((rule) => rule.test(command))) button.click();
     }
   };
   function scan() { if (location.hostname !== "t3.like.cloud" || location.protocol !== "https:") return; buildPanel(); void autoApproveAllowlisted(); }
