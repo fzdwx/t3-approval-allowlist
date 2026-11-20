@@ -4,6 +4,7 @@
   const scanned = new WeakSet();
   const approvals = new Map();
   const threadTitles = new Map();
+  const knownThreads = new Map();
   const subscribed = new Set();
   let scanTimer = null;
   let panel = null;
@@ -59,6 +60,13 @@
   };
   const getApproveButton = () => [...document.querySelectorAll("button")].find((button) => visible(button) && /^(批准|approve)$/i.test((button.innerText || button.getAttribute("aria-label") || "").trim()) && approvalCardFor(button));
   const pendingSessions = () => [...document.querySelectorAll('button,[role="button"]')].filter(visible).map((button) => ({ button, text: (button.innerText || button.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim() })).filter(({ text }) => /待批准/.test(text) && text.length < 300).filter(({ button }) => !button.closest("#t3-approval-allowlist-panel"));
+  const subscribeVisiblePendingSessions = () => {
+    for (const { text } of pendingSessions()) {
+      for (const [threadId, thread] of knownThreads) {
+        if (thread.title && text.includes(thread.title)) subscribeThread(threadId);
+      }
+    }
+  };
   const postRequest = (request) => window.postMessage({ source: "t3-approval-allowlist-page", type: "request", request }, "*");
   const subscribeThread = (threadId) => {
     if (!threadId || subscribed.has(threadId)) return;
@@ -89,6 +97,7 @@
       if (typeof value.thread.title === "string") {
         next.title = value.thread.title;
         threadTitles.set(value.thread.id, value.thread.title);
+        knownThreads.set(value.thread.id, value.thread);
       }
       if (value.thread.pendingRuntimeRequest?.id) subscribeThread(value.thread.id);
       else if (value.thread.id && value.thread.pendingRuntimeRequest === null) {
@@ -179,7 +188,7 @@
       if (rules.hashes.has(fingerprint) || rules.globs.some((rule) => rule.test(command))) button.click();
     }
   };
-  function scan() { if (location.hostname !== "t3.like.cloud" || location.protocol !== "https:") return; buildPanel(); void autoApproveAllowlisted(); }
+  function scan() { if (location.hostname !== "t3.like.cloud" || location.protocol !== "https:") return; subscribeVisiblePendingSessions(); buildPanel(); void autoApproveAllowlisted(); }
   function schedule() { if (scanTimer !== null) return; scanTimer = window.setTimeout(() => { scanTimer = null; scan(); }, 150); }
   new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   window.setInterval(schedule, 1200);
