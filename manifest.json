@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "T3 Approval Allowlist",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "仅对本地白名单中的完整命令自动批准 T3 Code 审批卡片。",
   "permissions": [
     "storage"

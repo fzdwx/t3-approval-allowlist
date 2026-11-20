@@ -89,6 +89,13 @@
     if (Array.isArray(value)) { for (const item of value) visitBackend(item, context); return; }
     const next = { ...context };
     if (typeof value.threadId === "string") next.threadId = value.threadId;
+    if (typeof value.id === "string" && typeof value.title === "string" && (value.projectId || value.runtimeMode || value.status)) {
+      next.threadId = value.id;
+      next.title = value.title;
+      threadTitles.set(value.id, value.title);
+      knownThreads.set(value.id, value);
+      if (value.pendingRuntimeRequest?.id) subscribeThread(value.id);
+    }
     if (typeof value.requestId === "string") next.requestId = value.requestId;
     else if (typeof value.id === "string" && (value.kind === "approval_request" || value.requestKind === "command")) next.requestId = value.id;
     if (typeof value.title === "string") next.title = value.title;
