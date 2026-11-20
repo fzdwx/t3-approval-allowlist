@@ -3,6 +3,7 @@
   const STORAGE_KEY = "t3ApprovalAllowlistV1";
   const scanned = new WeakSet();
   const approvals = new Map();
+  const threadTitles = new Map();
   const subscribed = new Set();
   let scanTimer = null;
   let panel = null;
@@ -85,16 +86,24 @@
     if (typeof value.title === "string") next.title = value.title;
     if (value.thread && typeof value.thread === "object") {
       if (typeof value.thread.id === "string") next.threadId = value.thread.id;
-      if (typeof value.thread.title === "string") next.title = value.thread.title;
+      if (typeof value.thread.title === "string") {
+        next.title = value.thread.title;
+        threadTitles.set(value.thread.id, value.thread.title);
+      }
       if (value.thread.pendingRuntimeRequest?.id) subscribeThread(value.thread.id);
+      else if (value.thread.id && value.thread.pendingRuntimeRequest === null) {
+        for (const key of approvals.keys()) if (key.startsWith(`${value.thread.id}:`)) approvals.delete(key);
+      }
     }
     if (value.snapshot?.threads) visitBackend(value.snapshot.threads, next);
     if (value.thread?.pendingRuntimeRequest?.id) subscribeThread(value.thread.id);
+    const resolved = (value.type === "runtime-request.updated" || value.type === "approval_request" || value.kind === "approval_request") && value.status && value.status !== "pending" && value.status !== "waiting";
+    if (resolved && next.threadId && next.requestId) approvals.delete(`${next.threadId}:${next.requestId}`);
     const isApproval = value.kind === "approval_request" || value.type === "approval_request" || value.requestKind === "command";
-    if (isApproval && next.threadId && next.requestId) {
+    if (isApproval && next.threadId && next.requestId && !resolved) {
       const detail = textCandidate(value);
       const existing = approvals.get(`${next.threadId}:${next.requestId}`) || {};
-      approvals.set(`${next.threadId}:${next.requestId}`, { ...existing, threadId: next.threadId, requestId: next.requestId, title: next.title || existing.title || "待批准会话", detail: detail || existing.detail || "审批命令详情已同步，展开查看原始请求" });
+      approvals.set(`${next.threadId}:${next.requestId}`, { ...existing, threadId: next.threadId, requestId: next.requestId, title: next.title || threadTitles.get(next.threadId) || existing.title || "待批准会话", detail: detail || existing.detail || "审批命令详情已同步，展开查看原始请求" });
     }
     for (const [key, child] of Object.entries(value)) {
       if (key === "snapshot" || key === "thread") continue;
